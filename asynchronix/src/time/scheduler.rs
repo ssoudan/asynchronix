@@ -16,6 +16,7 @@ use recycle_box::{coerce_box, RecycleBox};
 use crate::channel::{ChannelId, Sender};
 use crate::executor::Executor;
 use crate::model::{InputFn, Model};
+use crate::simulation::Address;
 use crate::time::{MonotonicTime, TearableAtomicTime};
 use crate::util::priority_queue::PriorityQueue;
 use crate::util::sync_cell::SyncCellReader;
@@ -416,6 +417,26 @@ impl<M: Model> Scheduler<M> {
         );
 
         Ok(event_key)
+    }
+    /// Sends and processes an event by [`Address`] inside the simulation, blocking until completion.
+    ///
+    /// Simulation time remains unchanged.
+    pub async fn send_event<MM, F, T, S>(&self, func: F, arg: T, address: impl Into<Address<MM>>)
+    where
+        MM: Model,
+        F: for<'a> InputFn<'a, MM, T, S>,
+        T: Send + Clone + 'static,
+    {
+        let address = address.into();
+        let sender = &address.0;
+        let _ = sender
+            .send(
+                move |model: &mut MM, scheduler, recycle_box: recycle_box::RecycleBox<()>| {
+                    let fut = func.call(model, arg, scheduler);
+                    coerce_box!(RecycleBox::recycle(recycle_box, fut))
+                },
+            )
+            .await;
     }
 }
 
