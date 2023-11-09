@@ -38,14 +38,24 @@ impl Emitter {
                 .await;
 
             // deal with the receiver later
-            let deadline = scheduler.time() + self.delay;
+            let deadline = scheduler.time() + 2 * self.delay;
             scheduler
-                .schedule_event(deadline, Emitter::reply_later, a)
+                .schedule_event(deadline, Emitter::unsubscribe_later, a.clone())
+                .expect("failed to schedule event");
+
+            let another_deadline = scheduler.time() + self.delay;
+            scheduler
+                .schedule_event_by_address(
+                    another_deadline,
+                    Receiver::something,
+                    self.id.clone(),
+                    a,
+                )
                 .expect("failed to schedule event");
         }
     }
 
-    async fn reply_later(&mut self, a: Address<Receiver>, scheduler: &Scheduler<Self>) {
+    async fn unsubscribe_later(&mut self, a: Address<Receiver>, scheduler: &Scheduler<Self>) {
         scheduler
             .send_event(Receiver::unsubscribe, self.id.clone(), a)
             .await;
@@ -77,6 +87,12 @@ impl Receiver {
     async fn unsubscribe(&mut self, id: String) {
         self.output
             .send(format!("[{}] unsubscribe: {}", self.id, id))
+            .await;
+    }
+
+    async fn something(&mut self, id: String) {
+        self.output
+            .send(format!("[{}] something: {}", self.id, id))
             .await;
     }
 }
@@ -178,6 +194,12 @@ fn main() {
     t += DELAY;
 
     assert_eq!(simu.time(), t);
+    assert_eq!(r_1_output.take(), Some("[r1] something: a".to_string()));
+
+    simu.step();
+    t += DELAY;
+
+    assert_eq!(simu.time(), t);
     assert_eq!(r_1_output.take(), Some("[r1] unsubscribe: a".to_string()));
 
     ///////////////
@@ -188,11 +210,23 @@ fn main() {
     t += DELAY;
 
     assert_eq!(simu.time(), t);
+    assert_eq!(r_2_output.take(), Some("[r2] something: a".to_string()));
+
+    simu.step();
+    t += DELAY;
+
+    assert_eq!(simu.time(), t);
     assert_eq!(r_2_output.take(), Some("[r2] unsubscribe: a".to_string()));
 
     ///////////////
     simu.send_event(Emitter::subscribe_now, (), &a_addr);
     assert_eq!(r_3_output.take(), Some("[r3] receive: a".to_string()));
+
+    simu.step();
+    t += DELAY;
+
+    assert_eq!(simu.time(), t);
+    assert_eq!(r_3_output.take(), Some("[r3] something: a".to_string()));
 
     simu.step();
     t += DELAY;

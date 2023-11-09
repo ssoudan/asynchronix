@@ -438,6 +438,31 @@ impl<M: Model> Scheduler<M> {
             )
             .await;
     }
+
+    /// Schedule an event at a future time by [`Address`].
+    pub fn schedule_event_by_address<MM, F, T, S>(
+        &self,
+        deadline: impl Deadline,
+        func: F,
+        arg: T,
+        address: impl Into<Address<MM>>,
+    ) -> Result<(), SchedulingError>
+    where
+        MM: Model,
+        F: for<'a> InputFn<'a, MM, T, S>,
+        T: Send + Clone + 'static,
+        S: Send + 'static,
+    {
+        let now = self.time();
+        let time = deadline.into_time(now);
+        if now >= time {
+            return Err(SchedulingError::InvalidScheduledTime);
+        }
+        let sender: Sender<MM> = address.into().0;
+        schedule_event_at_unchecked(time, func, arg, sender, &self.scheduler_queue);
+
+        Ok(())
+    }
 }
 
 impl<M: Model> fmt::Debug for Scheduler<M> {
