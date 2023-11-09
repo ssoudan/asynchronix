@@ -3,8 +3,8 @@
 //! This example demonstrates in particular:
 //!
 //! * Scheduler::send_event to send an event to a [`Model`] by [`Address`].
+//! * Scheduler::schedule_event_by_address to schedule an event for a [`Model`] by [`Address`].
 //!
-
 use std::time::Duration;
 
 use asynchronix::model::{Model, Output, Requestor};
