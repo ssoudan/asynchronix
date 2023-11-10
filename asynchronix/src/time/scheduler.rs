@@ -15,8 +15,8 @@ use recycle_box::{coerce_box, RecycleBox};
 
 use crate::channel::{ChannelId, Sender};
 use crate::executor::Executor;
-use crate::model::{InputFn, Model};
-use crate::simulation::Address;
+use crate::model::{InputFn, Model, ReplierFn};
+use crate::simulation::{Address, QueryError};
 use crate::time::{MonotonicTime, TearableAtomicTime};
 use crate::util::priority_queue::PriorityQueue;
 use crate::util::sync_cell::SyncCellReader;
@@ -462,6 +462,41 @@ impl<M: Model> Scheduler<M> {
         schedule_event_at_unchecked(time, func, arg, sender, &self.scheduler_queue);
 
         Ok(())
+    }
+
+    /// Query by [`Address`]
+    pub async fn send_query<MM, F, T, R, S>(
+        &self,
+        func: F,
+        arg: T,
+        address: impl Into<Address<MM>>,
+    ) -> Result<R, QueryError>
+    where
+        MM: Model,
+        F: for<'a> ReplierFn<'a, MM, T, R, S>,
+        T: Send + Clone + 'static,
+        R: Send + 'static,
+    {
+        let mut reply_receiver = multishot::Receiver::new();
+
+        let reply_sender = reply_receiver.sender().unwrap();
+
+        let address = address.into();
+        let sender = &address.0;
+        let send_fut = sender.send(
+            move |model: &mut MM, scheduler, recycle_box: recycle_box::RecycleBox<()>| {
+                let fut = async move {
+                    let reply = func.call(model, arg, scheduler).await;
+                    reply_sender.send(reply);
+                };
+
+                coerce_box!(RecycleBox::recycle(recycle_box, fut))
+            },
+        );
+
+        send_fut.await.map_err(|_| QueryError {})?;
+
+        reply_receiver.recv().await.map_err(|_| QueryError {})
     }
 
     /// Returns the [`Address`] of a model so it can be shared with other models.
