@@ -4,6 +4,7 @@
 //!
 //! * Scheduler::send_event to send an event to a [`Model`] by [`Address`].
 //! * Scheduler::schedule_event_by_address to schedule an event for a [`Model`] by [`Address`].
+//! * Scheduler::address to get the [`Address`] of a [`Model`].
 //!
 use std::time::Duration;
 
