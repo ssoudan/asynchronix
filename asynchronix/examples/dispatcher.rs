@@ -67,6 +67,7 @@ impl Model for Emitter {}
 struct Receiver {
     id: String,
     output: Output<String>,
+    register: Output<Address<Self>>,
 }
 
 impl Receiver {
@@ -75,6 +76,7 @@ impl Receiver {
         Self {
             id,
             output: Default::default(),
+            register: Default::default(),
         }
     }
     ///
@@ -94,6 +96,10 @@ impl Receiver {
         self.output
             .send(format!("[{}] something: {}", self.id, id))
             .await;
+    }
+
+    async fn register(&mut self, (): (), scheduler: &Scheduler<Self>) {
+        self.register.send(scheduler.address()).await;
     }
 }
 
@@ -125,6 +131,10 @@ impl Dispatcher {
         self.last = (self.last + 1) % self.receivers.len();
 
         a.clone()
+    }
+
+    async fn dynamic_registeration(&mut self, a: Address<Receiver>) {
+        self.register_receiver(a);
     }
 }
 
@@ -159,9 +169,12 @@ fn main() {
 
     // Connections.
     a.subscribe.connect(Dispatcher::dispatch, &d_mbox);
+    r_3.register
+        .connect(Dispatcher::dynamic_registeration, &d_mbox);
 
     // Model handles for simulation.
     let a_addr = a_mbox.address();
+    let r_3_addr = r_3_mbox.address();
     let mut r_1_output = r_1.output.connect_slot().0;
     let mut r_2_output = r_2.output.connect_slot().0;
     let mut r_3_output = r_3.output.connect_slot().0;
@@ -217,6 +230,10 @@ fn main() {
 
     assert_eq!(simu.time(), t);
     assert_eq!(r_2_output.take(), Some("[r2] unsubscribe: a".to_string()));
+
+    ///////////////
+    // get r3 registered
+    simu.send_event(Receiver::register, (), &r_3_addr);
 
     ///////////////
     simu.send_event(Emitter::subscribe_now, (), &a_addr);

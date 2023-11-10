@@ -463,6 +463,11 @@ impl<M: Model> Scheduler<M> {
 
         Ok(())
     }
+
+    /// Returns the [`Address`] of a model so it can be shared with other models.
+    pub fn address(&self) -> Address<M> {
+        Address(self.sender.clone())
+    }
 }
 
 impl<M: Model> fmt::Debug for Scheduler<M> {
